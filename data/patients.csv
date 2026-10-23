@@ -1,0 +1,21 @@
+id,name,age,sex,bmi,hba1c,diagnosis_years,family_history_flag,genetic_marker,medications
+1,Elena Rostova,48,F,34.2,6.1,12.6,1,PPARG Pro12Ala (Variant),Semaglutide 0.5mg QW + Metformin 850mg BID
+2,Arthur Pendelton,67,M,25.8,7.2,13.9,1,Negative (Wild Type),Dapagliflozin 10mg QD + Metformin 1000mg BID
+3,Amina Al-Mansoor,65,F,32.3,8.5,11.7,1,TCF7L2 rs7903146 (Mod Risk CT),Metformin 1000mg BID + Sitagliptin 100mg QD
+4,David Kim,43,M,26.2,7.3,5.2,1,KCNJ11 E23K (Variant),Metformin 1000mg BID + Glimepiride 2mg QD
+5,Priya Sharma,53,F,24.1,6.5,6.7,0,TCF7L2 rs7903146 (High Risk TT),Metformin 500mg BID + Empagliflozin 10mg QD
+6,Carlos Morales,69,M,28.6,9.2,12.7,0,PPARG Pro12Ala (Variant),Diet & Exercise Monotherapy
+7,Grace Hopper,64,F,36.6,6.4,13.8,1,Negative (Wild Type),Metformin 1000mg BID
+8,Marcus Sterling,50,M,24.6,8.2,15.5,1,TCF7L2 rs7903146 (Mod Risk CT),Semaglutide 0.5mg QW + Metformin 850mg BID
+9,Beatrice O'Connor,50,F,24.0,8.8,4.2,1,KCNJ11 E23K (Variant),Dapagliflozin 10mg QD + Metformin 1000mg BID
+10,Hassan Tariq,53,M,30.2,7.1,14.6,1,TCF7L2 rs7903146 (High Risk TT),Metformin 1000mg BID + Sitagliptin 100mg QD
+11,Sunita Patel,49,F,33.6,6.4,3.7,1,PPARG Pro12Ala (Variant),Metformin 1000mg BID + Glimepiride 2mg QD
+12,Lukas Lindqvist,70,M,36.4,9.8,15.1,1,Negative (Wild Type),Metformin 500mg BID + Empagliflozin 10mg QD
+13,Fatima Zahra,55,F,33.3,6.3,9.3,1,TCF7L2 rs7903146 (Mod Risk CT),Diet & Exercise Monotherapy
+14,Robert Chen,71,M,28.0,7.6,4.7,1,KCNJ11 E23K (Variant),Metformin 1000mg BID
+15,Mei-Ling Zhou,67,F,36.3,9.5,4.8,1,TCF7L2 rs7903146 (High Risk TT),Semaglutide 0.5mg QW + Metformin 850mg BID
+16,Samuel Jackson,54,M,24.8,8.3,12.5,0,PPARG Pro12Ala (Variant),Dapagliflozin 10mg QD + Metformin 1000mg BID
+17,Chloe Dupont,65,F,24.0,6.1,11.5,1,Negative (Wild Type),Metformin 1000mg BID + Sitagliptin 100mg QD
+18,Alejandro Gomez,68,M,24.8,9.0,2.3,1,TCF7L2 rs7903146 (Mod Risk CT),Metformin 1000mg BID + Glimepiride 2mg QD
+19,Ananya Roy,49,F,29.6,6.0,6.2,1,KCNJ11 E23K (Variant),Metformin 500mg BID + Empagliflozin 10mg QD
+20,William Gallagher,46,M,33.3,7.9,14.3,1,TCF7L2 rs7903146 (High Risk TT),Diet & Exercise Monotherapy

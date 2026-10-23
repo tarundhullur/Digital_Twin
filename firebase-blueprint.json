@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated healthcare clinician profile",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "Clinician name" },
+        "email": { "type": "string", "description": "Clinician email address" },
+        "role": { "type": "string", "enum": ["doctor", "specialist", "researcher"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email"]
+    },
+    "ClinicalNote": {
+      "title": "ClinicalNote",
+      "description": "Doctor observation or recommendation logged on a patient digital twin",
+      "type": "object",
+      "properties": {
+        "patientId": { "type": "number", "description": "Patient identifier" },
+        "authorId": { "type": "string", "description": "Doctor UID" },
+        "authorName": { "type": "string", "description": "Doctor name" },
+        "content": { "type": "string", "maxLength": 2000 },
+        "riskLevel": { "type": "string", "enum": ["Low", "Moderate", "High"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["patientId", "authorId", "content"]
+    },
+    "WhatIfPlan": {
+      "title": "WhatIfPlan",
+      "description": "Saved prospective counterfactual intervention plan",
+      "type": "object",
+      "properties": {
+        "patientId": { "type": "number" },
+        "authorId": { "type": "string" },
+        "extraSteps": { "type": "number" },
+        "carbIntakeG": { "type": "number" },
+        "sleepHoursDelta": { "type": "number" },
+        "medicationTaken": { "type": "boolean" },
+        "baselineRisk": { "type": "number" },
+        "projectedRisk": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["patientId", "authorId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Clinician profile document"
+    },
+    "/clinicalNotes/{noteId}": {
+      "schema": "ClinicalNote",
+      "description": "Patient clinical digital twin observation notes"
+    },
+    "/whatIfPlans/{planId}": {
+      "schema": "WhatIfPlan",
+      "description": "Saved What-If counterfactual treatment simulations"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "GlucoTwin",
+  "description": "Digital Twin for Type 2 Diabetes – Virtual Patient Model fusing EHR & Wearable Time-Series Data for 2h Glucose Spike Prediction",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

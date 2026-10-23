@@ -1,0 +1,33 @@
+{
+  "model_name": "GlucoTwin GradientBoostingClassifier",
+  "algorithm": "Gradient Boosting (Scikit-Learn)",
+  "accuracy": 0.9465,
+  "precision": 0.9713,
+  "recall": 0.9364,
+  "f1_score": 0.9535,
+  "roc_auc": 0.9896,
+  "total_samples": 13280,
+  "train_samples": 9520,
+  "test_samples": 3760,
+  "trained_at": "2026-10-22 19:09:21",
+  "feature_importances": {
+    "glucose_last": 0.7789,
+    "hba1c": 0.1171,
+    "hr_last": 0.0158,
+    "hr_mean_2h": 0.0136,
+    "glucose_max_2h": 0.0114,
+    "glucose_mean_2h": 0.0107,
+    "glucose_min_2h": 0.0094,
+    "glucose_slope_2h": 0.0089,
+    "diagnosis_years": 0.0065,
+    "steps_sum_2h": 0.0063,
+    "glucose_std_2h": 0.0049,
+    "hrv_mean_2h": 0.0049,
+    "sleep_quality_score": 0.004,
+    "bmi": 0.0027,
+    "age": 0.0025,
+    "hrv_last": 0.0019,
+    "genetic_risk_score": 0.0005,
+    "family_history_flag": 0.0001
+  }
+}
