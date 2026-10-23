@@ -382,6 +382,16 @@ async function startServer() {
     });
   });
 
+  app.post('/patients/:id/predict', (req, res) => {
+    handleFastApiOrFallback(req, res, () => {
+      const pid = Number(req.params.id);
+      const patient = patientsCache.find((p) => p.id === pid) || patientsCache[0];
+      const readings = readingsByPatient.get(pid) || [];
+      const pred = calculateSpikeRisk(patient, readings, req.body);
+      res.json(pred);
+    });
+  });
+
   app.get('/patients/:id', (req, res) => {
     handleFastApiOrFallback(req, res, () => {
       const pid = Number(req.params.id);
