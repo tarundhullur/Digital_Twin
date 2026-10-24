@@ -1,12 +1,14 @@
 /**
  * GlucoTwin Authentication Context
- * Manages JWT session state, Firebase Authentication, persistence in localStorage, and auto-validation.
+ * Manages JWT session state, Firebase Authentication, Firestore profile synchronization,
+ * localStorage persistence, and authorization guards.
  */
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authAPI } from '../api/client';
-import { auth, googleProvider, testFirestoreConnection } from '../firebase';
+import { auth, db, googleProvider, testFirestoreConnection } from '../firebase';
 import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 export interface User {
   id: number | string;
@@ -50,11 +52,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (storedToken) {
         try {
           const userData = await authAPI.getMe();
-          setUser(userData);
-          localStorage.setItem('glucotwin_user', JSON.stringify(userData));
+          if (userData) {
+            setUser(userData);
+            localStorage.setItem('glucotwin_user', JSON.stringify(userData));
+          }
         } catch {
-          // If stored token failed and not a firebase mock session, clear it
-          if (!storedToken.startsWith('fb-')) {
+          // If token verification returned an error and not a firebase session
+          if (!storedToken.startsWith('fb-') && storedToken.length < 50) {
             localStorage.removeItem('glucotwin_token');
             localStorage.removeItem('glucotwin_user');
             setToken(null);
@@ -68,20 +72,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     verifySession();
 
     // Listen for Firebase Auth state changes
-    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
-        const clinicianUser: User = {
-          id: fbUser.uid,
-          name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Clinician',
-          email: fbUser.email || 'clinician@hospital.org',
-          role: 'doctor',
-          firebase_uid: fbUser.uid,
-        };
-        const fbToken = `fb-${fbUser.uid}`;
-        setUser(clinicianUser);
-        setToken(fbToken);
-        localStorage.setItem('glucotwin_user', JSON.stringify(clinicianUser));
-        localStorage.setItem('glucotwin_token', fbToken);
+        try {
+          const idToken = await fbUser.getIdToken();
+          const clinicianUser: User = {
+            id: fbUser.uid,
+            name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Clinician',
+            email: fbUser.email || 'clinician@hospital.org',
+            role: 'doctor',
+            firebase_uid: fbUser.uid,
+          };
+
+          // Save / merge profile to Firestore users collection
+          try {
+            await setDoc(
+              doc(db, 'users', fbUser.uid),
+              {
+                userId: fbUser.uid,
+                name: clinicianUser.name,
+                email: clinicianUser.email,
+                role: 'doctor',
+                createdAt: new Date().toISOString(),
+              },
+              { merge: true }
+            );
+          } catch (fsErr) {
+            console.warn('[FIRESTORE] Clinician profile sync notice:', fsErr);
+          }
+
+          setUser(clinicianUser);
+          setToken(idToken);
+          localStorage.setItem('glucotwin_user', JSON.stringify(clinicianUser));
+          localStorage.setItem('glucotwin_token', idToken);
+        } catch (err) {
+          console.warn('[AUTH] Error resolving Firebase ID token:', err);
+        }
       }
     });
 
@@ -100,18 +126,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGoogle = async () => {
     const result = await signInWithPopup(auth, googleProvider);
     const fbUser = result.user;
+    const idToken = await fbUser.getIdToken();
+
     const clinicianUser: User = {
       id: fbUser.uid,
-      name: fbUser.displayName || 'Dr. ' + (fbUser.email?.split('@')[0] || 'Specialist'),
+      name: fbUser.displayName || 'Dr. ' + (fbUser.email?.split('@')[0] || 'Clinician'),
       email: fbUser.email || 'doctor@hospital.org',
       role: 'doctor',
       firebase_uid: fbUser.uid,
     };
-    const fbToken = `fb-${fbUser.uid}`;
+
+    // Sync to Firestore
+    try {
+      await setDoc(
+        doc(db, 'users', fbUser.uid),
+        {
+          userId: fbUser.uid,
+          name: clinicianUser.name,
+          email: clinicianUser.email,
+          role: 'doctor',
+          createdAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch (fsErr) {
+      console.warn('[FIRESTORE] Syncing Google user to Firestore:', fsErr);
+    }
+
     setUser(clinicianUser);
-    setToken(fbToken);
+    setToken(idToken);
     localStorage.setItem('glucotwin_user', JSON.stringify(clinicianUser));
-    localStorage.setItem('glucotwin_token', fbToken);
+    localStorage.setItem('glucotwin_token', idToken);
   };
 
   const register = async (name: string, email: string, password: string, role = 'doctor') => {

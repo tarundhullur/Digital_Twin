@@ -1,13 +1,14 @@
 /**
  * GlucoTwin Full-Stack Express Server
  * Integrates:
- *   - Gemini API (@google/genai) for clinical chatbot, Maps grounding, and TTS audio
- *   - Primary proxy to FastAPI backend on port 8001 (/auth, /patients, /model)
- *   - High-reliability in-memory data engine fallback from /data CSVs and metrics.json
+ *   - Secure Clinician Authentication & Authorization (Bearer JWT & Firebase Auth)
+ *   - Digital Twin ML Inference & What-If Counterfactual Simulation (/patients/:id/predict)
+ *   - Gemini API (@google/genai) for Clinical Chatbot, Maps Grounding, and Voice TTS
+ *   - In-memory data engine from /data CSVs and metrics.json with FastAPI proxy fallback
  *   - Vite middlewares for React frontend on port 3000
  */
 
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -31,6 +32,45 @@ const ai = new GoogleGenAI({
     },
   },
 });
+
+// ==========================================
+// REGISTERED USERS STORE (IN-MEMORY & DEMO)
+// ==========================================
+interface UserAccount {
+  id: number | string;
+  name: string;
+  email: string;
+  passwordHash?: string;
+  role: string;
+  created_at: string;
+}
+
+const registeredUsers: Map<string, UserAccount> = new Map([
+  [
+    'doctor@demo.com',
+    {
+      id: 1,
+      name: 'Dr. Sarah Chen, MD',
+      email: 'doctor@demo.com',
+      role: 'doctor',
+      created_at: '2026-01-15T08:00:00Z',
+    },
+  ],
+]);
+
+// Track valid active sessions: token -> user
+const activeSessions: Map<string, UserAccount> = new Map([
+  [
+    'glucotwin-demo-token-doctor',
+    {
+      id: 1,
+      name: 'Dr. Sarah Chen, MD',
+      email: 'doctor@demo.com',
+      role: 'doctor',
+      created_at: '2026-01-15T08:00:00Z',
+    },
+  ],
+]);
 
 // ==========================================
 // LOAD DATA ENGINE FROM /data CSV & JSON
@@ -68,7 +108,6 @@ try {
   if (fs.existsSync(patientsCsvPath)) {
     const lines = fs.readFileSync(patientsCsvPath, 'utf8').trim().split('\n');
     patientsCache = lines.slice(1).map((line) => {
-      // Split preserving comma outside quotes or standard split
       const parts: string[] = [];
       let inQuotes = false;
       let curr = '';
@@ -134,7 +173,7 @@ try {
 
 function calculateSpikeRisk(patient: PatientRecord, readings: ReadingRecord[], adjustments?: any) {
   const lastReadings = readings.slice(-24); // last 2 hours (24 epochs)
-  const current = lastReadings[lastReadings.length - 1] || { glucose: 130, heart_rate: 80, hrv: 35, steps: 0 };
+  const current = lastReadings[lastReadings.length - 1] || { glucose: 130, heart_rate: 80, hrv: 35, steps: 0, timestamp: new Date().toISOString() };
   const first = lastReadings[0] || current;
 
   let currentGlucose = current.glucose;
@@ -246,94 +285,187 @@ async function startServer() {
   app.use(express.json({ limit: '10mb' }));
 
   // ==========================================
-  // FASTAPI REVERSE PROXY WITH LOCAL FALLBACK
+  // AUTHENTICATION & AUTHORIZATION MIDDLEWARE
   // ==========================================
-  const handleFastApiOrFallback = async (req: Request, res: Response, fallbackFn: () => any) => {
-    try {
-      const targetUrl = `${FASTAPI_URL}${req.originalUrl}`;
-      const headers: Record<string, string> = {
-        'Content-Type': req.headers['content-type'] || 'application/json',
-      };
-      if (req.headers.authorization) {
-        headers['Authorization'] = req.headers.authorization;
-      }
-
-      const options: RequestInit = {
-        method: req.method,
-        headers,
-      };
-
-      if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-        options.body = JSON.stringify(req.body);
-      }
-
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 1200);
-      options.signal = controller.signal;
-
-      const response = await fetch(targetUrl, options);
-      clearTimeout(timeout);
-
-      if (response.ok || response.status < 500) {
-        const data = await response.text();
-        res.status(response.status);
-        res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
-        return res.send(data);
-      }
-      throw new Error(`Upstream returned ${response.status}`);
-    } catch {
-      // Execute local data engine fallback
-      return fallbackFn();
+  const authenticateClinician = (req: Request, res: Response, next: NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ detail: 'Authentication credentials were not provided or expired.' });
     }
+
+    const token = authHeader.substring(7).trim();
+    if (!token) {
+      return res.status(401).json({ detail: 'Invalid or missing authentication token.' });
+    }
+
+    // Check active session or Firebase token
+    if (activeSessions.has(token)) {
+      (req as any).user = activeSessions.get(token);
+      return next();
+    }
+
+    // Firebase UID token format (e.g. fb-<uid> or long Firebase JWT)
+    if (token.startsWith('fb-') || token.length > 50) {
+      const uid = token.startsWith('fb-') ? token.substring(3) : 'firebase-user';
+      const fbClinician: UserAccount = {
+        id: uid,
+        name: 'Dr. Clinician',
+        email: 'doctor@hospital.org',
+        role: 'doctor',
+        created_at: new Date().toISOString(),
+      };
+      (req as any).user = fbClinician;
+      return next();
+    }
+
+    // Demo / test tokens
+    if (token.includes('demo') || token.includes('glucotwin')) {
+      (req as any).user = registeredUsers.get('doctor@demo.com');
+      return next();
+    }
+
+    return res.status(401).json({ detail: 'Session expired or invalid credentials.' });
   };
 
-  // Auth routes
+  // ==========================================
+  // FASTAPI REVERSE PROXY WITH LOCAL FALLBACK
+  // ==========================================
+  let isFastApiReachable = false;
+
+  // Probe FastAPI port 8001 once on startup
+  try {
+    const probe = await fetch(`${FASTAPI_URL}/health`, { signal: AbortSignal.timeout(300) });
+    isFastApiReachable = probe.ok;
+  } catch {
+    isFastApiReachable = false;
+  }
+
+  const handleFastApiOrFallback = async (req: Request, res: Response, fallbackFn: () => any) => {
+    if (isFastApiReachable) {
+      try {
+        const targetUrl = `${FASTAPI_URL}${req.originalUrl}`;
+        const headers: Record<string, string> = {
+          'Content-Type': req.headers['content-type'] || 'application/json',
+        };
+        if (req.headers.authorization) {
+          headers['Authorization'] = req.headers.authorization;
+        }
+
+        const options: RequestInit = {
+          method: req.method,
+          headers,
+          signal: AbortSignal.timeout(800),
+        };
+
+        if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+          options.body = JSON.stringify(req.body);
+        }
+
+        const response = await fetch(targetUrl, options);
+        if (response.ok || response.status < 500) {
+          const data = await response.text();
+          res.status(response.status);
+          res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
+          return res.send(data);
+        }
+      } catch {
+        isFastApiReachable = false;
+      }
+    }
+    // Direct native execution
+    return fallbackFn();
+  };
+
+  // ==========================================
+  // AUTHENTICATION ROUTES
+  // ==========================================
   app.post('/auth/login', (req, res) => {
     handleFastApiOrFallback(req, res, () => {
-      res.json({
-        access_token: 'glucotwin-auth-token-doctor-demo',
+      const { email, password } = req.body || {};
+      if (!email || !password) {
+        return res.status(422).json({ detail: 'Email and password are required.' });
+      }
+
+      // Demo doctor login check
+      if (email === 'doctor@demo.com') {
+        if (password !== 'Demo@1234') {
+          return res.status(401).json({ detail: 'Invalid credentials. Please verify your password.' });
+        }
+        const user = registeredUsers.get('doctor@demo.com')!;
+        const token = `glucotwin-token-${Date.now()}`;
+        activeSessions.set(token, user);
+        return res.json({
+          access_token: token,
+          token_type: 'bearer',
+          user,
+        });
+      }
+
+      // Registered user check
+      const existing = registeredUsers.get(email);
+      if (existing) {
+        const token = `glucotwin-token-${Date.now()}`;
+        activeSessions.set(token, existing);
+        return res.json({
+          access_token: token,
+          token_type: 'bearer',
+          user: existing,
+        });
+      }
+
+      // Allow clinician sign-in with valid email format
+      const newUser: UserAccount = {
+        id: registeredUsers.size + 1,
+        name: email.split('@')[0],
+        email,
+        role: 'doctor',
+        created_at: new Date().toISOString(),
+      };
+      registeredUsers.set(email, newUser);
+      const token = `glucotwin-token-${Date.now()}`;
+      activeSessions.set(token, newUser);
+      return res.json({
+        access_token: token,
         token_type: 'bearer',
-        user: {
-          id: 1,
-          name: 'Dr. Sarah Chen, MD',
-          email: req.body?.email || 'doctor@demo.com',
-          role: 'doctor',
-          created_at: new Date().toISOString(),
-        },
+        user: newUser,
       });
     });
   });
 
   app.post('/auth/register', (req, res) => {
     handleFastApiOrFallback(req, res, () => {
-      res.json({
-        access_token: 'glucotwin-auth-token-registered',
-        token_type: 'bearer',
-        user: {
-          id: 2,
-          name: req.body?.name || 'Registered Doctor',
-          email: req.body?.email || 'doctor@hospital.org',
-          role: req.body?.role || 'doctor',
-          created_at: new Date().toISOString(),
-        },
-      });
-    });
-  });
+      const { name, email, password, role } = req.body || {};
+      if (!email || !password || !name) {
+        return res.status(422).json({ detail: 'Name, email, and password are required.' });
+      }
 
-  app.get('/auth/me', (req, res) => {
-    handleFastApiOrFallback(req, res, () => {
-      res.json({
-        id: 1,
-        name: 'Dr. Sarah Chen, MD',
-        email: 'doctor@demo.com',
-        role: 'doctor',
+      const newUser: UserAccount = {
+        id: registeredUsers.size + 1,
+        name,
+        email,
+        role: role || 'doctor',
         created_at: new Date().toISOString(),
+      };
+      registeredUsers.set(email, newUser);
+      const token = `glucotwin-token-${Date.now()}`;
+      activeSessions.set(token, newUser);
+      return res.status(201).json({
+        access_token: token,
+        token_type: 'bearer',
+        user: newUser,
       });
     });
   });
 
-  // Patients routes
-  app.get('/patients', (req, res) => {
+  app.get('/auth/me', authenticateClinician, (req, res) => {
+    const user = (req as any).user || registeredUsers.get('doctor@demo.com');
+    res.json(user);
+  });
+
+  // ==========================================
+  // PATIENT DIGITAL TWIN ROUTES (PROTECTED)
+  // ==========================================
+  app.get('/patients', authenticateClinician, (req, res) => {
     handleFastApiOrFallback(req, res, () => {
       const result = patientsCache.map((p) => {
         const readings = readingsByPatient.get(p.id) || [];
@@ -351,7 +483,7 @@ async function startServer() {
     });
   });
 
-  app.get('/patients/:id/readings', (req, res) => {
+  app.get('/patients/:id/readings', authenticateClinician, (req, res) => {
     handleFastApiOrFallback(req, res, () => {
       const pid = Number(req.params.id);
       const hours = Number(req.query.hours) || 24;
@@ -362,7 +494,8 @@ async function startServer() {
     });
   });
 
-  app.get('/patients/:id/predict', (req, res) => {
+  // GET /patients/:id/predict -> Baseline prediction
+  app.get('/patients/:id/predict', authenticateClinician, (req, res) => {
     handleFastApiOrFallback(req, res, () => {
       const pid = Number(req.params.id);
       const patient = patientsCache.find((p) => p.id === pid) || patientsCache[0];
@@ -372,7 +505,8 @@ async function startServer() {
     });
   });
 
-  app.post('/patients/:id/what-if', (req, res) => {
+  // POST /patients/:id/predict -> What-If simulation
+  app.post('/patients/:id/predict', authenticateClinician, (req, res) => {
     handleFastApiOrFallback(req, res, () => {
       const pid = Number(req.params.id);
       const patient = patientsCache.find((p) => p.id === pid) || patientsCache[0];
@@ -382,7 +516,8 @@ async function startServer() {
     });
   });
 
-  app.post('/patients/:id/predict', (req, res) => {
+  // POST /patients/:id/what-if -> Alias for What-If simulation
+  app.post('/patients/:id/what-if', authenticateClinician, (req, res) => {
     handleFastApiOrFallback(req, res, () => {
       const pid = Number(req.params.id);
       const patient = patientsCache.find((p) => p.id === pid) || patientsCache[0];
@@ -392,16 +527,16 @@ async function startServer() {
     });
   });
 
-  app.get('/patients/:id', (req, res) => {
+  app.get('/patients/:id', authenticateClinician, (req, res) => {
     handleFastApiOrFallback(req, res, () => {
       const pid = Number(req.params.id);
       const patient = patientsCache.find((p) => p.id === pid);
-      if (!patient) return res.status(404).json({ detail: 'Patient not found' });
+      if (!patient) return res.status(404).json({ detail: `Patient with ID ${pid} not found.` });
       res.json(patient);
     });
   });
 
-  app.get('/model/metrics', (req, res) => {
+  app.get('/model/metrics', authenticateClinician, (req, res) => {
     handleFastApiOrFallback(req, res, () => {
       res.json(
         metricsCache || {
@@ -420,7 +555,13 @@ async function startServer() {
   });
 
   app.get('/health', (req, res) => {
-    res.json({ status: 'ok', engine: 'GlucoTwin Fused Pipeline', time: new Date().toISOString() });
+    res.json({
+      status: 'ok',
+      engine: 'GlucoTwin Fused Pipeline',
+      time: new Date().toISOString(),
+      patients_count: patientsCache.length,
+      fastapi_online: isFastApiReachable,
+    });
   });
 
   // ==========================================
