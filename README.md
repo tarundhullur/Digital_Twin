@@ -165,7 +165,7 @@ The video should cover:
 
 ## 11. Presentation
 
-**Project Presentation:** [ADD YOUR PPT OR PDF LINK]
+**Project Presentation:** [Project Presentation (Google Slides)](https://docs.google.com/presentation/d/1hblT8vDjYkv04x6-S1-txv0dHc3mEchx/edit?usp=sharing&ouid=118287435164465096283&rtpof=true&sd=true)
 
 The presentation covers the problem statement, proposed solution, platform features, architecture, simulation engine, machine learning evaluation, implementation outcomes, limitations, and future scope.
 
@@ -202,8 +202,8 @@ Potential future improvements include:
 - **Public GitHub Repository:** [https://github.com/tarundhullur/Digital_Twin](https://github.com/tarundhullur/Digital_Twin)
 - **Live Prototype:** [ADD DEPLOYED WEBSITE URL]
 - **Demo Video:** [ADD UNLISTED YOUTUBE URL]
-- **Architecture Diagram (PDF/PPT):** [ADD LINK]
-- **Presentation (PDF/PPT):** [ADD LINK]
+- **Architecture Diagram (PDF/PPT):** [Architecture Diagram (Google Drive)](https://drive.google.com/file/d/1LUSgnH-jfKg4fFa1j9DmURBntjYUH0kE/view?usp=sharing)
+- **Presentation (PDF/PPT):** [Project Presentation (Google Slides)](https://docs.google.com/presentation/d/1hblT8vDjYkv04x6-S1-txv0dHc3mEchx/edit?usp=sharing&ouid=118287435164465096283&rtpof=true&sd=true)
 
 ## 16. Accessibility
 
